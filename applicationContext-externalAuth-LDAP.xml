@@ -1,124 +1,115 @@
 <!--
-  ~ Copyright © 2005 - 2018 TIBCO Software Inc.
+  ~ Copyright (C) 2005 - 2019 TIBCO Software Inc. All rights reserved.
   ~ http://www.jaspersoft.com.
   ~
+  ~ Unless you have purchased a commercial license agreement from Jaspersoft,
+  ~ the following license terms apply:
+  ~
   ~ This program is free software: you can redistribute it and/or modify
-  ~ it under the terms of the GNU Affero General Public License as published by
-  ~ the Free Software Foundation, either version 3 of the License, or
-  ~ (at your option) any later version.
+  ~ it under the terms of the GNU Affero General Public License as
+  ~ published by the Free Software Foundation, either version 3 of the
+  ~ License, or (at your option) any later version.
   ~
   ~ This program is distributed in the hope that it will be useful,
   ~ but WITHOUT ANY WARRANTY; without even the implied warranty of
-  ~ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+  ~ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
   ~ GNU Affero General Public License for more details.
   ~
   ~ You should have received a copy of the GNU Affero General Public License
-  ~ along with this program.  If not, see <https://www.gnu.org/licenses/>.
+  ~ along with this program. If not, see <http://www.gnu.org/licenses/>.
   -->
   
-<!-- Všechny změny v souboru nutno uložit a poté restartovat server (stačí reload aplikace v tomcatu)! -->
+<!--
+ Copyright 2020 Adam Fišer | Wanex.cz
+ https://github.com/silebis/JasperReportsServer_LDAP
+-->
 
 <beans xmlns="http://www.springframework.org/schema/beans"
        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-       xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-3.1.xsd">
+       xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-4.0.xsd">
 
     <!-- ############ LDAP authentication ############
       - Sample configuration of external authentication via an external LDAP server.
     -->
-	
-	
-	<!-- ############ PreAuth ############ -->
-	
-	<!-- This wrapped user details service is used by the preauth provider defined above and
-         provides a hook into the LdapUserDetails Service -->
-	<!--
-	<bean id="wrappedUserDetailsService"
-          class="org.springframework.security.core.userdetails.UserDetailsByNameServiceWrapper">
-        <property name="userDetailsService">
-            <ref local="ldapUserDetailsService"/>
-        </property>
-    </bean>
-	-->
-	
-	<!-- This LdapUserDetailsService creates UserDetails objects using the userSearch
-         and ldapAuthoritiesPopulator beans and creates a User-object according to the
-         userDetailsMapper -->
-	<!--
-    <bean id="ldapUserDetailsService" class="org.springframework.security.ldap.userdetails.LdapUserDetailsService">
-        <constructor-arg index="0">
-            <ref local="userSearch" />
-        </constructor-arg>
-        <constructor-arg index="1">
-            <ref local="ldapAuthenticationProvider" />
-        </constructor-arg>
-        <property name="userDetailsMapper" ref="userDetailsMapper"/>
-    </bean>
-	-->
-	
-		
-	
-	<!-- ############ PreAuth ############ -->
-	
-	
 
     <bean id="proxyAuthenticationProcessingFilter" class="com.jaspersoft.jasperserver.api.security.EncryptionAuthenticationProcessingFilter"
           parent="authenticationProcessingFilter">
         <property name="authenticationManager">
-            <ref local="ldapAuthenticationManager"/>
+            <ref bean="ldapAuthenticationManager"/>
         </property>
 
         <property name="authenticationSuccessHandler" ref="externalAuthSuccessHandler" />
     </bean>
 
-	<!-- aka proxyPreAuthenticatedProcessingFilter -->
-    <bean id="proxyRequestParameterAuthenticationFilter"
-          class="com.jaspersoft.jasperserver.war.util.ExternalRequestParameterAuthenticationFilter" 
-		  parent="requestParameterAuthenticationFilter">
+    <bean id="proxyAuthenticationRestProcessingFilter" class="com.jaspersoft.jasperserver.api.security.externalAuth.DefaultAuthenticationRestProcessingFilter">
         <property name="authenticationManager">
-            <ref local="ldapAuthenticationManager"/>
+            <ref bean="ldapAuthenticationManager"/>
         </property>
-        <property name="externalDataSynchronizer" 
-				  ref="externalDataSynchronizer"/>
+        <property name="authenticationFailureHandler">
+            <bean class="com.jaspersoft.jasperserver.api.security.externalAuth.RestAuthenticationFailureHandler"/>
+        </property>
+        <property name="authenticationSuccessHandler">
+            <bean class="com.jaspersoft.jasperserver.api.security.externalAuth.RestAuthenticationSuccessHandler">
+                <property name="externalDataSynchronizer" ref="externalDataSynchronizer"/>
+            </bean>
+        </property>
+
+        <property name="rememberMeServices">
+            <bean class="org.springframework.security.web.authentication.NullRememberMeServices" />
+        </property>
+
+        <property name="filterProcessesUrl" value="/rest_v2/login"/>
+    </bean>
+
+    <bean id="proxyRequestParameterAuthenticationFilter"
+          class="com.jaspersoft.jasperserver.war.util.ExternalRequestParameterAuthenticationFilter" parent="requestParameterAuthenticationFilter">
+        <property name="authenticationManager">
+            <ref bean="ldapAuthenticationManager"/>
+        </property>
+        <property name="externalDataSynchronizer" ref="externalDataSynchronizer"/>
+    </bean>
+
+    <bean id="proxyRestRequestParameterAuthenticationFilter"
+          class="com.jaspersoft.jasperserver.war.util.ExternalRequestParameterAuthenticationFilter" parent="restRequestParameterAuthenticationFilter">
+        <property name="authenticationManager">
+            <ref bean="ldapAuthenticationManager"/>
+        </property>
+        <property name="externalDataSynchronizer" ref="externalDataSynchronizer"/>
     </bean>
 
     <bean id="externalAuthSuccessHandler"
-          class="com.jaspersoft.jasperserver.api.security.externalAuth.JrsExternalAuthenticationSuccessHandler" 
-		  parent="successHandler">
+          class="com.jaspersoft.jasperserver.api.security.externalAuth.JrsExternalAuthenticationSuccessHandler" parent="successHandler">
         <property name="externalDataSynchronizer">
-            <ref local="externalDataSynchronizer"/>
+            <ref bean="externalDataSynchronizer"/>
         </property>
     </bean>
 
     <bean id="proxyBasicProcessingFilter"
           class="com.jaspersoft.jasperserver.api.security.externalAuth.ExternalAuthBasicProcessingFilter" parent="basicProcessingFilter">
-        <property name="authenticationManager" ref="ldapAuthenticationManager"/>
+        <constructor-arg index="0" ref="ldapAuthenticationManager"/>
         <property name="externalDataSynchronizer" ref="externalDataSynchronizer"/>
     </bean>
 
     <bean id="ldapAuthenticationManager" class="com.jaspersoft.jasperserver.api.security.externalAuth.wrappers.spring.JSProviderManager">
-        <property name="providers">
+        <constructor-arg index="0">
             <list>
-                <ref local="ldapAuthenticationProvider"/>
+                <ref bean="ldapAuthenticationProvider"/>
                 <ref bean="${bean.daoAuthenticationProvider}"/>
                 <!--anonymousAuthenticationProvider only needed if filterInvocationInterceptor.alwaysReauthenticate is set to true
                 <ref bean="anonymousAuthenticationProvider"/>-->
             </list>
-        </property>
+        </constructor-arg>
     </bean>
-	
-	
 
-
-    <bean id="ldapAuthenticationProvider" 
-		  class="com.jaspersoft.jasperserver.api.security.externalAuth.wrappers.spring.ldap.JSLdapAuthenticationProvider">
+    <bean id="ldapAuthenticationProvider" class="com.jaspersoft.jasperserver.api.security.externalAuth.wrappers.spring.ldap.JSLdapAuthenticationProvider">
         <constructor-arg>
             <bean class="com.jaspersoft.jasperserver.api.security.externalAuth.wrappers.spring.ldap.JSBindAuthenticator">
-                <constructor-arg><ref local="ldapContextSource"/></constructor-arg>
+                <constructor-arg><ref bean="ldapContextSource"/></constructor-arg>
                 <property name="userSearch" ref="userSearch"/>
             </bean>
         </constructor-arg>
         <constructor-arg>
-            <ref local="ldapAuthPopulator"/>
+			<ref bean="ldapAuthPopulator"/>
         </constructor-arg>
     </bean>
 	
@@ -126,9 +117,9 @@
 	<!-- AFI ldapAuthPopulator -->
 	<bean id="ldapAuthPopulator" 
 		  class="com.jaspersoft.jasperserver.api.security.externalAuth.wrappers.spring.ldap.JSDefaultLdapAuthoritiesPopulator">
-		<constructor-arg index="0"><ref local="ldapContextSource"/></constructor-arg>
+		<constructor-arg index="0"><ref bean="ldapContextSource"/></constructor-arg>
 		<!-- AFI pokud bychom chtěli omezit jen na vybranou skupinu (&amp;(objectClass=user)(cn={0})(memberOf=CN=JasperAccessGroup,CN=Roles,DC=domain,DC=company,DC=eu ))-->
-		<!-- Pokud nechceme toto nastavení, stačí mít nastaveno: DC=czech,DC=company,DC=eu -->
+		<!-- Pokud nechceme toto nastavení, stačí mít nastaveno: DC=domain,DC=company,DC=eu -->
 		<constructor-arg index="1"><value>DC=domain,DC=company,DC=eu</value></constructor-arg>                 
 		<property name="groupRoleAttribute" value="cn"/> <!-- CN - objekt AD, ponechat bez změny -->
 		<property name="groupSearchFilter" value="(&amp;(objectCategory=group)(member={0}))"/> <!-- vyčítá všechny skupiny, kterým je uživatel členem. V opačném případě nastavit filtr na index 1 tj: (uid={1}) -->
@@ -137,24 +128,18 @@
 		<property name="defaultRole" value="ROLE_USER"/> <!-- výchozí skupina pro uživatele -->
 		<property name="convertToUpperCase" value="false"/> <!-- konverze na velké zakázána -->
 	</bean>
-	
+	<!-- /AFI ldapAuthPopulator -->
 
-	<!--   AFI   
-        Microsoft-AD specific search by sAMAccountName
-        (similar to https://community.jaspersoft.com/documentation/tibco-jasperreports-server-authentication-cookbook/v601/authentication-microsoft )
-    -->
     <bean id="userSearch"
-		  class="org.springframework.security.ldap.search.FilterBasedLdapUserSearch">
-          <!--AFI zmena tridy pro nacitani jmena z ldap, jinak vratit class="com.jaspersoft.jasperserver.api.security.externalAuth.wrappers.spring.ldap.JSFilterBasedLdapUserSearch"> -->
+          class="com.jaspersoft.jasperserver.api.security.externalAuth.wrappers.spring.ldap.JSFilterBasedLdapUserSearch">
         <constructor-arg index="0">
             <value>DC=domain,DC=company,DC=eu</value>
         </constructor-arg>
         <constructor-arg index="1">
-            <!-- afi <value>(uid={0})</value> -->
-			<value>(sAMAccountName={0})</value> <!-- ověřování to, co zadal uživatel při přihlašování do jasperu -->
+            <value>(sAMAccountName={0})</value>
         </constructor-arg>
         <constructor-arg index="2">
-            <ref local="ldapContextSource" />
+            <ref bean="ldapContextSource" />
         </constructor-arg>
         <property name="searchSubtree">
             <value>true</value>
@@ -183,19 +168,12 @@
 				<value>title</value>
             </list>
         </property>
-		
     </bean>
 
-	<!-- konfigurace pro přihlášení k LDAP -->
     <bean id="ldapContextSource" class="com.jaspersoft.jasperserver.api.security.externalAuth.ldap.JSLdapContextSource">
-        <!-- <constructor-arg value="${external.ldap.url}"/> -->
+        <constructor-arg value="ldap://server.domain.company.eu"/>
         <!-- manager user name and password (may not be needed)  -->
-        <!-- <property name="userDn" value="${external.ldap.username}"/> -->
-        <!-- <property name="password" value="${external.ldap.password}"/> -->
-		
-		<constructor-arg value="ldap://server.domain.company.eu"/>
-        <!-- manager user name and password (may not be needed)  -->
-        <property name="userDn" value="cn=UserName,CN=Users,DC=domain,DC=company,DC=eu"/>
+        <property name="userDn" value="cn=LdapUser,CN=Users,DC=domain,DC=company,DC=eu"/>
         <property name="password" value="***password***"/>
 		<property name="referral" value="follow"/>
     </bean>
@@ -206,13 +184,9 @@
           class="com.jaspersoft.jasperserver.api.security.externalAuth.ExternalDataSynchronizerImpl">
         <property name="externalUserProcessors">
             <list>
-				<!--<ref local="externalUserSetupProcessor"/>-->
+                <ref bean="externalUserSetupProcessor"/>
                 <!-- Example processor for creating user folder-->
-                <!--<ref local="externalUserFolderProcessor"/>-->
-				
-				<!-- připojení procesoru pro základní připojení - externalUserSetuProcessor nebo s načítáním info externalInetOrgPersonUserSetupProcessor. Nikdy ne však současně oba-->
-				<ref local="externalUserSetupProcessor"/>			
-				<!-- <ref local="externalInetOrgPersonUserSetupProcessor"/>-->	
+                <!--<ref bean="externalUserFolderProcessor"/>-->
             </list>
         </property>
     </bean>
@@ -225,9 +199,8 @@
         <property name="objectPermissionService" ref="objectPermissionService"/>
     </bean>
 
-	<!-- Základní bean pro výchozí přihlášení bez načítání dat o uživateli. Pro ověření funkčnosti -->
     <bean id="externalUserSetupProcessor" class="com.jaspersoft.jasperserver.api.security.externalAuth.processors.ExternalUserSetupProcessor" parent="abstractExternalProcessor">
-		<!--Default permitted role characters; others are removed. Change regular expression to allow other chars.
+        <!--Default permitted role characters; others are removed. Change regular expression to allow other chars.
                     <property name="permittedExternalRoleNameRegex" value="[A-Za-z0-9_]+"/>-->
 
         <property name="userAuthorityService">
@@ -235,11 +208,11 @@
         </property>
         <property name="defaultInternalRoles">
             <list>
-                <value>ROLE_USER</value> <!-- výchozí interní role pro uživatele -->
+                <value>ROLE_USER</value>
             </list>
         </property>
 
-		<!-- mapování rolí AD k Jasperu -->
+        <!-- mapování rolí AD k Jasperu -->
 		<!-- Všechny AD role musí obashovat prefix "ROLE_" (v názvu role AD se prefix nevyskytuje!) -->
         <property name="organizationRoleMap">
             <map>				
@@ -249,7 +222,7 @@
                     </key>
                     <value>ROLE_ADMINISTRATOR</value> <!-- jasper role-->
                 </entry>
-								<entry>
+				<entry>
                     <key>
                         <value>ROLE_Jasper_User_Department</value>
                     </key>
@@ -266,74 +239,7 @@
 			</list>
 			
 		</property>
-	</bean>
-	
-	
-	
-	
-	
-	<!-- Bean pro načítání dat po uživateli, skupiny, jméno, atd skrze vlastní processor) -->
-	<bean id="externalInetOrgPersonUserSetupProcessor" class="cz.wanex.jasperserver.ExternalInetOrgPersonUserSetupProcessor" parent="abstractExternalProcessor">
-        <!--Default permitted role characters; others are removed. Change regular expression to allow other chars.
-                    <property name="permittedExternalRoleNameRegex" value="[A-Za-z0-9_]+"/>-->
-
-        <property name="userAuthorityService">
-            <ref bean="${bean.internalUserAuthorityService}"/>
-        </property>
-		
-		<!-- These are the default attribute names 'displayName' and 'mail'
-            Be careful on changes: Value must be an InetOrgPerson String property, it is case-sensitive, and must fit the returningAttributes of the userSearch
- 
-            <property name="fullNameAttribute" value="displayName"/>
-            <property name="emailAddressAttribute" value="mail"/>
-        -->
-		
-		<property name="fullNameAttribute" value="displayName"/>
-        <property name="emailAddressAttribute" value="mail"/>
-		
-		
-        <property name="defaultInternalRoles">
-            <list>
-                <value>ROLE_USER</value> <!-- výchozí interní role pro uživatele -->
-            </list>
-        </property>
-
-		<!-- mapování rolí AD k Jasperu -->
-		<!-- Všechny AD role musí obashovat prefix "ROLE_" (v názvu role AD se prefix nevyskytuje!) -->
-        <property name="organizationRoleMap">
-            <map>				
-				<entry>
-                    <key>
-                        <value>ROLE_Jasper_Admin</value> <!-- AD role-->
-                    </key>
-                    <value>ROLE_ADMINISTRATOR</value> <!-- jasper role-->
-                </entry>
-								<entry>
-                    <key>
-                        <value>ROLE_Jasper_User_Department</value>
-                    </key>
-                    <value>ROLE_USER_DEPARTMENT</value>
-                </entry>
-				
-            </map>
-        </property>
-		
-		<!-- pouze tyto povolené skupiny mají přístup to jasperu -->
-		<property name="permittedRolesRegex">
-			<list>	
-				<value>ROLE_Jasper_Admin</value>
-				<value>ROLE_Jasper_User_Department</value>
-			</list>
-		</property>
-
     </bean>
-	
-	
-	
-	
-	
-	
-	
 
     <!-- EXAMPLE Processor
     <bean id="externalUserFolderProcessor"
